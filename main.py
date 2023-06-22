@@ -22,17 +22,24 @@ app.add_middleware(
 # Load the preprocessed data and create the movie predictor object
 zip_file_path = r"./tmdb_5000_credits.zip"
 file_name = "tmdb_5000_credits.csv"
-credits
-with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-        with zip_ref.open(file_name) as file:
-            credits = pd.read_csv(file)
-movies = pd.read_csv('tmdb_5000_movies.csv')
-movies = movies.merge(credits, on='title')
-movies = movies[['movie_id','title','overview','genres','keywords','cast','crew']]
+
+# Load movies and credits data as generators
+movies = pd.read_csv('tmdb_5000_movies.csv', iterator=True)
+credits = pd.read_csv(zip_file_path, compression='zip', iterator=True)
+    
+chunk_size = 1000  # Number of rows to process per chunk
+movies_chunk = movies.get_chunk(chunk_size)
+credits_chunk = credits.get_chunk(chunk_size)
+
+movies = movies_chunk.merge(credits_chunk, on='title')
+movies = movies[['movie_id', 'title', 'overview', 'genres', 'keywords', 'cast', 'crew']]
 movies.dropna(inplace=True)
 movies.duplicated().sum()
 
 import ast
+from nltk.stem.porter import PorterStemmer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 def convert(obj):
     l = []
@@ -54,8 +61,6 @@ def convert3(obj):
             break
     return l
 
-movies['cast'] = movies['cast'].apply(convert3)
-
 def fetch_director(obj):
     l = []
     for i in ast.literal_eval(obj):
@@ -63,54 +68,46 @@ def fetch_director(obj):
             l.append(i['name'])
     return l
 
-movies['crew'] = movies['crew'].apply(fetch_director)
-movies['overview'] = movies['overview'].apply(lambda x: x.split())
-movies['genres'] = movies['genres'].apply(lambda x: [i.replace(" ", "") for i in x])
-movies['keywords'] = movies['keywords'].apply(lambda x: [i.replace(" ", "") for i in x])
-movies['cast'] = movies['cast'].apply(lambda x: [i.replace(" ", "") for i in x])
-movies['crew'] = movies['crew'].apply(lambda x: [i.replace(" ", "") for i in x])
-movies['tags'] = movies['overview'] + movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
-new_df = movies[['movie_id', 'title', 'tags']]
-new_df['tags'] = new_df['tags'].apply(lambda x: " ".join(x))
-new_df['tags'] = new_df['tags'].apply(lambda x: x.lower())
-
-import nltk
-from nltk.stem.porter import PorterStemmer
-
+# Initialize stemmer and vectorizer
 ps = PorterStemmer()
-
-def stem(text):
-    y = []
-    for i in text.split():
-        y.append(ps.stem(i))
-    return " ".join(y)
-
-new_df['tags'] = new_df['tags'].apply(stem)
-
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
 cv = CountVectorizer(max_features=5000, stop_words='english')
-vectors = cv.fit_transform(new_df['tags']).toarray()
-similarity = cosine_similarity(vectors)
 
-def recommend(movie):
-    movie_index = new_df[new_df['title'] == movie].index[0]
-    distances = similarity[movie_index]
-    movies_list = sorted(list(enumerate(distances)), reverse=True, key=lambda x: x[1])[1:6]
-    predictions = [new_df.iloc[i[0]].title for i in movies_list]
-    return predictions
+def preprocess_data(chunk):
+    chunk['genres'] = chunk['genres'].apply(convert)
+    chunk['keywords'] = chunk['keywords'].apply(convert)
+    chunk['cast'] = chunk['cast'].apply(convert3)
+    chunk['crew'] = chunk['crew'].apply(fetch_director)
+    chunk['overview'] = chunk['overview'].apply(lambda x: x.split())
+    chunk['genres'] = chunk['genres'].apply(lambda x: [i.replace(" ", "") for i in x])
+    chunk['keywords'] = chunk['keywords'].apply(lambda x: [i.replace(" ", "") for i in x])
+    chunk['cast'] = chunk['cast'].apply(lambda x: [i.replace(" ", "") for i in x])
+    chunk['crew'] = chunk['crew'].apply(lambda x: [i.replace(" ", "") for i in x])
+    chunk['tags'] = chunk['overview'] + chunk['genres'] + chunk['keywords'] + chunk['cast'] + chunk['crew']
+    chunk[['movie_id', 'title', 'tags']] = chunk[['movie_id', 'title', 'tags']].astype(str)
+    chunk['tags'] = chunk['tags'].apply(lambda x: " ".join(x))
+    chunk['tags'] = chunk['tags'].apply(lambda x: x.lower())
+    chunk['tags'] = chunk['tags'].apply(stem)
+    vectors = cv.fit_transform(chunk['tags']).toarray()
+    similarity = cosine_similarity(vectors)
+    return chunk, similarity
+
+movies, similarity = preprocess_data(movies)
 
 # Create the MoviePredictor class
-
 class MoviePredictor:
-    def __init__(self, new_df, cv, recommend):
-        self.new_df = new_df
-        self.cv = cv
-        self.recommend = recommend
+    def __init__(self, movies, similarity):
+        self.movies = movies
+        self.similarity = similarity
+    
+    def recommend(self, movie):
+        movie_index = self.movies[self.movies['title'] == movie].index[0]
+        distances = self.similarity[movie_index]
+        movies_list = sorted(list(enumerate(distances)), reverse=True, key=lambda x: x[1])[1:6]
+        predictions = [self.movies.iloc[i[0]].title for i in movies_list]
+        return predictions
 
 # Create an instance of the MoviePredictor class
-movie_predictor = MoviePredictor(new_df, cv, recommend)
+movie_predictor = MoviePredictor(movies, similarity)
 
 # Pickle the movie_predictor object
 filename = 'movie_predictor.sav'
@@ -126,4 +123,4 @@ class ModelInput(BaseModel):
 def movie_recommend(input_parameters: ModelInput):
     movie = input_parameters.movie
     predictions = model.recommend(movie)
-    return {'predictions': predictions}    
+    return {'predictions': predictions}
