@@ -68,7 +68,11 @@ def fetch_director(obj):
 # Initialize stemmer and vectorizer
 ps = PorterStemmer()
 cv = CountVectorizer(max_features=5000, stop_words='english')
-
+def stem(text):
+    y = []
+    for i in text.split():
+        y.append(ps.stem(i))
+    return " ".join(y)
 def preprocess_data(chunk):
     chunk['genres'] = chunk['genres'].apply(convert)
     chunk['keywords'] = chunk['keywords'].apply(convert)
