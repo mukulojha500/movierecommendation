@@ -24,7 +24,8 @@ zip_file_path = r"./tmdb_5000_credits.zip"
 file_name = "tmdb_5000_credits.csv"
 credits
 with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-        credits=pd.read_csv(file_name)
+        with zip_ref.open(file_name) as file:
+            credits = pd.read_csv(file)
 movies = pd.read_csv('tmdb_5000_movies.csv')
 movies = movies.merge(credits, on='title')
 movies = movies[['movie_id','title','overview','genres','keywords','cast','crew']]
