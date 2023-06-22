@@ -47,9 +47,6 @@ def convert(obj):
         l.append(i['name'])
     return l
 
-movies['genres'] = movies['genres'].apply(convert)
-movies['keywords'] = movies['keywords'].apply(convert)
-
 def convert3(obj):
     l = []
     counter = 0
