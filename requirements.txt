@@ -1,9 +1,6 @@
 fastapi
 uvicorn
 pydantic
-sckit-learn
+scikit-learn
 numpy
 pandas
-json
-nltk
-ast
