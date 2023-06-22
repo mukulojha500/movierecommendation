@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 # Load the preprocessed data and create the movie predictor object
-zip_file_path = r"repo:mukulojha500/movierecommendation/tmdb_5000_credits.zip"
+zip_file_path = r"mukulojha500/movierecommendation/tmdb_5000_credits.zip"
 file_name = "tmdb_5000_credits.csv"
 credits
 with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
