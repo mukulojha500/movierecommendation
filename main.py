@@ -6,8 +6,19 @@ from pydantic import BaseModel
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.stem.porter import PorterStemmer
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load the preprocessed data and create the movie predictor object
 zip_file_path = "./tmdb_5000_credits.zip"
